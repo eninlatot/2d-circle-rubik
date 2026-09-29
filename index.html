@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>2D Circle Rubik</title>
+<style>
+:root{color-scheme:dark;--bg:#151c23;--panel:#1c2630;--line:#354653;--text:#edf3f8;--muted:#a7b8c8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;text-align:center;padding:8px 10px 12px}
+main{max-width:900px;margin:auto}
+h1{font-size:1.2rem;margin:2px 0}.sub{color:var(--muted);margin:3px 0 8px;font-size:.8rem}
+.board{width:min(100%,620px);margin:0 auto 6px;background:#182129;border:1px solid #26333e;border-radius:14px;box-shadow:0 5px 16px #0004;overflow:hidden}
+svg{display:block;width:100%;height:auto;touch-action:none}
+.ring{fill:none;stroke:#84919b;stroke-opacity:.28;stroke-width:2.5;vector-effect:non-scaling-stroke}
+.ring.active{stroke:#ffbf52;stroke-opacity:.95;stroke-width:4}
+.node{stroke:#111820;stroke-width:1.8;vector-effect:non-scaling-stroke;filter:url(#glow)}
+.node.moving{stroke:#ffbf52;stroke-width:2.8}
+.controls{margin:6px auto;max-width:620px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px}
+.turn-row{display:grid;grid-template-columns:42px repeat(6,minmax(0,1fr));align-items:center;gap:4px;margin:3px 0}
+.turn-label{font-size:.78rem;color:var(--muted);white-space:nowrap}
+button{font:inherit;color:var(--text);background:#2a3b49;border:1px solid #4c6578;border-radius:7px;padding:7px 2px;min-height:34px;font-size:.78rem;line-height:1;cursor:pointer;touch-action:manipulation;white-space:nowrap}
+button:active{background:#40586b}button:disabled{opacity:.45}
+.utility-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-top:7px;padding-top:7px;border-top:1px solid #344653}
+.utility-row button{font-size:.76rem;padding:7px 3px;white-space:normal}
+#status{min-height:1.2em;color:#a8e6ad;font-weight:600;font-size:.85rem;margin:4px}
+.note{font-size:.72rem;color:var(--muted);line-height:1.4;max-width:620px;margin:7px auto}
+@media(max-width:430px){
+ .turn-row{grid-template-columns:34px repeat(6,minmax(0,1fr));gap:3px}
+ button{font-size:.7rem;min-height:32px}
+ .turn-label{font-size:.7rem}
+ .utility-row{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .utility-row button{font-size:.72rem}
+}
+@media(max-width:520px){.note{display:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>2D Circle Rubik</h1>
+<p class="sub">3つの円 × 3層 — 本物のルービックキューブ規則（1手=90度/3玉移動）</p>
+<div class="board">
+<svg id="scene" viewBox="0 0 1000 900" role="img" aria-label="3つの円が交差する54個の玉のパズル">
+<defs><filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+<g id="rings"></g><g id="pieces"></g>
+</svg>
+</div>
+<div id="status" role="status" aria-live="polite">6色 × 9個 = 54個</div>
+<div class="controls compact-controls">
+<section class="card">
+  <div class="turn-row"><span class="turn-label">上円</span>
+    <button onclick="rotateRing('U',0,-1)">内↻</button><button onclick="rotateRing('U',0,1)">内↺</button>
+    <button onclick="rotateRing('U',1,-1)">中↻</button><button onclick="rotateRing('U',1,1)">中↺</button>
+    <button onclick="rotateRing('U',2,-1)">外↻</button><button onclick="rotateRing('U',2,1)">外↺</button>
+  </div>
+  <div class="turn-row"><span class="turn-label">左円</span>
+    <button onclick="rotateRing('L',0,-1)">内↻</button><button onclick="rotateRing('L',0,1)">内↺</button>
+    <button onclick="rotateRing('L',1,-1)">中↻</button><button onclick="rotateRing('L',1,1)">中↺</button>
+    <button onclick="rotateRing('L',2,-1)">外↻</button><button onclick="rotateRing('L',2,1)">外↺</button>
+  </div>
+  <div class="turn-row"><span class="turn-label">右円</span>
+    <button onclick="rotateRing('R',0,-1)">内↻</button><button onclick="rotateRing('R',0,1)">内↺</button>
+    <button onclick="rotateRing('R',1,-1)">中↻</button><button onclick="rotateRing('R',1,1)">中↺</button>
+    <button onclick="rotateRing('R',2,-1)">外↻</button><button onclick="rotateRing('R',2,1)">外↺</button>
+  </div>
+  <div class="utility-row">
+    <button onclick="helpStep()">HELP 次の1手</button>
+    <button onclick="solveAll()">自動解答</button>
+    <button onclick="shuffle()">シャッフル</button>
+    <button onclick="resetGame()">リセット</button>
+    <button onclick="undo()">1手戻す</button>
+  </div>
+</section>
+</div>
+<p class="note">1回の回転操作で90度（3玉分）が一括シフトします。本物のルービックキューブの1面回転と完全に同じ回転論理（群論）で色を入れ替えるパズルです。</p>
+</main>
+<script>
+"use strict";
+const NS="http://www.w3.org/2000/svg";
+const COLORS=["#2196f3","#4caf50","#f44336","#ff9800","#ffeb3b","#ffffff"];
+const RADII=[235,265,295];
+const CENTERS={U:{x:500,y:330},L:{x:300,y:570},R:{x:700,y:570}};
+const keys=["U","L","R"];
+let points=[], rings={}, history=[], moveLog=[], busy=false, active=null, animFrame=0;
+const $=id=>document.getElementById(id);
+
+function circleIntersections(a,r1,b,r2){
+ const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy);
+ if(d>r1+r2||d<Math.abs(r1-r2)||d===0)return [];
+ const along=(r1*r1-r2*r2+d*d)/(2*d);
+ const h=Math.sqrt(Math.max(0,r1*r1-along*along));
+ const x=a.x+along*dx/d,y=a.y+along*dy/d;
+ return [{x:x+h*dy/d,y:y-h*dx/d},{x:x-h*dy/d,y:y+h*dx/d}];
+}
+
+function makeGeometry(){
+ points=[];rings={};
+ for(const k of keys)for(let ri=0;ri<3;ri++)rings[k+ri]=[];
+ for(let a=0;a<keys.length;a++)for(let b=a+1;b<keys.length;b++){
+  const ka=keys[a],kb=keys[b];
+  for(let ra=0;ra<3;ra++)for(let rb=0;rb<3;rb++){
+   const pair=circleIntersections(CENTERS[ka],RADII[ra],CENTERS[kb],RADII[rb]);
+   for(const p of pair){
+    const id=points.length;
+    points.push({id,x:p.x,y:p.y,color:0});
+    rings[ka+ra].push({id,angle:Math.atan2(p.y-CENTERS[ka].y,p.x-CENTERS[ka].x)});
+    rings[kb+rb].push({id,angle:Math.atan2(p.y-CENTERS[kb].y,p.x-CENTERS[kb].x)});
+   }
+  }
+ }
+ for(const k of Object.keys(rings))rings[k].sort((a,b)=>a.angle-b.angle);
+ const cx=500,cy=540;
+ const sorted=[...points].sort((a,b)=>{
+  const aa=Math.atan2(a.y-cy,a.x-cx),ab=Math.atan2(b.y-cy,b.x-cx);
+  return aa-ab || a.y-b.y;
+ });
+ sorted.forEach((p,i)=>p.color=Math.floor(i/9));
+}
+
+function el(tag,attrs={}){
+ const e=document.createElementNS(NS,tag);
+ for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);
+ return e;
+}
+
+function draw(){
+ const rg=$("rings"),pg=$("pieces");rg.replaceChildren();pg.replaceChildren();
+ for(const k of keys)for(let ri=0;ri<3;ri++){
+  const c=CENTERS[k],r=RADII[ri];
+  rg.appendChild(el("circle",{cx:c.x,cy:c.y,r, class:"ring"+(active===k+ri?" active":"")}));
+ }
+ for(const p of points){
+  const c=el("circle",{cx:p.x,cy:p.y,r:10.5,fill:COLORS[p.color],class:"node","data-id":p.id});
+  pg.appendChild(c);
+ }
+}
+
+function setStatus(t){$("status").textContent=t}
+function snapshot(){return points.map(p=>p.color)}
+function saveUndo(){history.push({colors:snapshot(),moves:moveLog.slice()})}
+function restore(s){points.forEach((p,i)=>p.color=s[i]);draw()}
+
+// 本物のルービックキューブ規則：1手＝90度（3玉分）一括回転アニメーション
+function animateRotation(id, dir, duration = 300) {
+ return new Promise((resolve) => {
+  const list = rings[id];
+  if(!list || list.length !== 12) { resolve(); return; }
+  
+  const k = id[0], ri = Number(id[1]);
+  // 1手で3マス分（90度）一括シフト
+  const STEPS = 3;
+  const destShift = (dir === -1 ? 1 : -1) * STEPS;
+  const oldColors = list.map(v => points[v.id].color);
+  const activeRingSet = new Set(list.map(v => v.id));
+  
+  active = id;
+  busy = true;
+  
+  const start = performance.now();
+  const frame = (now) => {
+   const t = Math.min(1, (now - start) / duration);
+   const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+   
+   const g = $("pieces");
+   g.replaceChildren();
+   
+   for(const p of points){
+    if(!activeRingSet.has(p.id)){
+     g.appendChild(el("circle",{cx:p.x,cy:p.y,r:10.5,fill:COLORS[p.color],class:"node"}));
+     continue;
+    }
+    const idx = list.findIndex(v => v.id === p.id);
+    const from = list[idx];
+    const toIndex = (idx + destShift + list.length * 10) % list.length;
+    const to = list[toIndex];
+    
+    let delta = to.angle - from.angle;
+    if(destShift > 0 && delta < 0) delta += Math.PI * 2;
+    if(destShift < 0 && delta > 0) delta -= Math.PI * 2;
+    
+    const angle = from.angle + delta * e;
+    const c = CENTERS[k], r = RADII[ri];
+    
+    g.appendChild(el("circle",{
+     cx: c.x + r * Math.cos(angle),
+     cy: c.y + r * Math.sin(angle),
+     r: 10.5,
+     fill: COLORS[p.color],
+     class: "node moving"
+    }));
+   }
+   
+   if(t < 1){
+    animFrame = requestAnimationFrame(frame);
+   } else {
+    list.forEach((v, i) => {
+     const sourceIdx = (i - destShift + list.length * 10) % list.length;
+     points[v.id].color = oldColors[sourceIdx];
+    });
+    busy = false;
+    active = null;
+    draw();
+    resolve();
+   }
+  };
+  animFrame = requestAnimationFrame(frame);
+ });
+}
+
+function rotateRing(k, ri, dir){
+ if(busy) return;
+ const id = k + ri;
+ saveUndo();
+ moveLog.push({id, dir});
+ animateRotation(id, dir, 300).then(() => {
+  setStatus(`${k}円 ${["内","中","外"][ri]}層を90度回転（3玉移動）`);
+ });
+}
+
+function applyRingInstant(id, dir){
+ const list = rings[id];
+ if(!list || !list.length) return;
+ const STEPS = 3;
+ const shift = (dir === -1 ? 1 : -1) * STEPS;
+ const old = list.map(v => points[v.id].color);
+ list.forEach((v, i) => {
+  const sourceIdx = (i - shift + list.length * 10) % list.length;
+  points[v.id].color = old[sourceIdx];
+ });
+}
+
+function shuffle(){
+ if(busy) return;
+ const opts = Object.keys(rings);
+ saveUndo();
+ for(let n = 0; n < 20; n++){
+  const id = opts[Math.floor(Math.random() * opts.length)];
+  const dir = Math.random() < .5 ? -1 : 1;
+  applyRingInstant(id, dir);
+  moveLog.push({id, dir});
+ }
+ draw();
+ setStatus("シャッフル完了（1手=90度回転）。HELPで1手ずつ逆再生できます");
+}
+
+function helpStep(){
+ if(busy) return;
+ if(!moveLog.length){ setStatus("解答する手がありません。完成状態です"); return; }
+ saveUndo();
+ const move = moveLog.pop();
+ animateRotation(move.id, -move.dir, 300).then(() => {
+  setStatus(`ヒント：${move.id[0]}円・${["内","中","外"][Number(move.id[1])]}層を90度逆回転（3玉移動）`);
+ });
+}
+
+async function solveAll(){
+ if(busy) return;
+ if(!moveLog.length){ setStatus("すでに解答済みです"); return; }
+ saveUndo();
+ const count = moveLog.length;
+ setStatus(`自動解答中... (残り${moveLog.length}手)`);
+ 
+ while(moveLog.length){
+  const move = moveLog.pop();
+  // 自動解答も1手につき約0.3秒（300ms）かけてスムーズに移動
+  await animateRotation(move.id, -move.dir, 300);
+  setStatus(`自動解答中... (残り${moveLog.length}手)`);
+ }
+ setStatus(`${count}手を逆順に実行して、元の配置に戻しました`);
+}
+
+function undo(){
+ if(busy) return;
+ if(!history.length){ setStatus("戻せる操作がありません"); return; }
+ const item = history.pop();
+ restore(item.colors);
+ moveLog = item.moves.slice();
+ active = null;
+ draw();
+ setStatus("1手戻しました");
+}
+
+function resetGame(){
+ if(busy) return;
+ history = [];
+ moveLog = [];
+ active = null;
+ makeGeometry();
+ draw();
+ setStatus("リセット：6色 × 9個 = 54個");
+}
+
+makeGeometry();
+draw();
+</script>
+</body>
+</html>
