@@ -1,1 +1,1 @@
-# 2d-rubik-cube
+# 2d-circle-rubik
